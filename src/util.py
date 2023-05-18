@@ -1,16 +1,18 @@
+import os, ssl, random
+ssl._create_default_https_context = ssl._create_unverified_context
+
+import urllib.request
+from slack_sdk import WebhookClient 
+from bs4 import BeautifulSoup
+from pydantic import BaseModel
 from typing import List
 
-import os 
-from slack_sdk import WebhookClient 
-
-import requests
-from bs4 import BeautifulSoup
-
-from pydantic import BaseModel
-
-def send_message(msg):
+def send_message(blocks):
     client = WebhookClient(os.environ['SLACK_API_TOKEN'])
-    res = client.send(text=msg)
+    res = client.send(
+        text='New Message',
+        blocks=blocks
+    )
 
     assert res.status_code == 200
     assert res.body == 'ok'
@@ -21,19 +23,22 @@ class Apartment(BaseModel):
     availability: str
     price: str
 
-url = 'https://www.baumhausapts.com/floorplans'
-def get_apartments() -> List[Apartment]:
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'accept-encoding': 'gzip, deflate, br',
-        'accept-language': 'en-US,en;q=0.9',
-        'cache-control': 'max-age=0',
-    }
+def get_res(url):
+  username = os.environ.get('BRIGHTDATA_USERNAME')
+  password = os.environ.get('BRIGHTDATA_PASSWORD')
+  port = 22225
+  session_id = random.random()
+  super_proxy_url = ('http://%s-session-%s:%s@zproxy.lum-superproxy.io:%d' %
+      (username, session_id, password, port))
+  proxy_handler = urllib.request.ProxyHandler({
+      'http': super_proxy_url,
+      'https': super_proxy_url,
+  })
+  opener = urllib.request.build_opener(proxy_handler)
+  return opener.open(url).read().decode('utf8')
 
-    res = requests.get(url, headers=headers)
-    soup = BeautifulSoup(res.text, 'html.parser')
-    print(soup.prettify())
+def get_apartments(url = 'https://www.baumhausapts.com/floorplans') -> List[Apartment]:
+    soup = BeautifulSoup(get_res(url), 'html.parser')
 
     apartments = []
     for i, d in enumerate(soup.select('div.card')):
